@@ -44,14 +44,22 @@ machine(L1Cache, "MSI L1 Cache")
     //=====================
 
     I, AccessPermission:Invalid, desc="Not Present/Invalid";
-
     /* ECE552: Complete this section here */
-   
+    M, AccessPermission:Read_Write, desc="Modified state";
+	S, AccessPermission:Read_Only, desc="Read only state";
     //========================
     //ECE552: Transient States
     //========================
 
     /* ECE552: Complete this section here */
+	IS_D,  AccessPermission:Busy, desc="Intermediate state: going from I to S and waiting for Data";
+	IM_AD, AccessPermission:Busy, desc="Intermediate state: going from I to M and waiting for Data and Acks";
+	IM_A,  AccessPermission:Busy, desc="Intermediate state: going from I to M and waiting for an Ack";
+	SM_AD, AccessPermission:Busy, desc="Intermediate state: going from S to M and waiting for Data and Acks";
+	SM_A,  AccessPermission:Busy, desc="Intermediate state: going from S to M and waiting for Acks";
+	MI_A,  AccessPermission:Busy, desc="Intermediate state: going from M to I and waiting for Acks";
+	SI_A,  AccessPermission:Busy, desc="Intermediate state: going from S to I and waiting for Acks";
+	II_A,  AccessPermission:Busy, desc="Intermediate state: going from I to I and waiting for Acks";
   }
 
   // =============================================================================
@@ -601,4 +609,442 @@ machine(L1Cache, "MSI L1 Cache")
   // =============================================================================
 
   /* ECE552: Complete this section here */
+  
+  //Begin I state transitions
+  transition(I, Load , IS_D)
+  {
+	p_profileMiss;			//cache miss
+	i_allocateL1CacheBlock;	//allocate a cache block
+	as_issueGetS;			//issue a GetS to dir
+	v_allocateTBE;			//going into a transient state so we must allocate a Transient Block Entry
+	m_popMandatoryQueue;	//finish with request
+  }
+  
+  //        init state, action that occurs, state to transition to
+  transition(I, Store, IM_AD)
+  {
+	p_profileMiss;			//cache miss
+	i_allocateL1CacheBlock;	//allocate a cache block
+	am_issueGetM;			//issue a GetM to dir
+	v_allocateTBE;			//going into a transient state so we must allocate a Transient Block Entry
+	m_popMandatoryQueue;	//finish with request	
+  }
+
+  //Begin IS_D state transitions
+  transition(IS_D, Load)
+  {
+	z_stall;
+  }
+  
+  transition(IS_D, Store)
+  {
+	z_stall;
+  }
+
+  transition(IS_D, Replacement)
+  {
+	z_stall;
+  }
+  
+  transition(IS_D, Inv)
+  {
+	z_stall;
+  }
+  
+  //case IS_D -> S when action:Data from Dir (ack=0 case)
+  transition(IS_D, Data_from_Dir_No_Acks, S)
+  {
+	u_writeDataToCache;	//write incoming data to cache
+	rx_load_hit;		//load hit due to a cache miss that was serviced
+	w_deallocateTBE;	//remove TBE since we are done
+	n_popResponseQueue;	//finish with request from the Response queue
+  }
+  
+  //case IS_D -> S when action:Data from Dir from Owner
+  transition(IS_D, Data_from_Owner, S)
+  {
+	u_writeDataToCache;	//write incoming data to cache
+	rx_load_hit;		//load hit due to a cache miss that was serviced
+	w_deallocateTBE;	//remove TBE since we are done
+	n_popResponseQueue;	//finish with request from the Response queue
+  }
+  
+  //Begin IM_AD state transitions
+  transition(IM_AD, Load)
+  {
+	z_stall;
+  }
+  
+  transition(IM_AD, Store)
+  {
+	z_stall;
+  }
+  
+  transition(IM_AD, Replacement)
+  {
+	z_stall;
+  }
+  
+  transition(IM_AD, Fwd_GetS)
+  {
+	z_stall;
+  }
+  
+  transition(IM_AD, Fwd_GetM)
+  {
+	z_stall;
+  }
+  
+  transition(IM_AD, Data_from_Dir_No_Acks, M)
+  {
+  //isNumAcks already set?
+	u_writeDataToCache;	//write incoming data to cache
+	sx_store_hit;		//we got a store hit in response to servicing a cache miss
+	w_deallocateTBE;	//remove TBE since we are done
+	n_popResponseQueue;	//finish with request from the Response queue
+  }
+  
+  //recieve data from dir (ack>0) case
+  transition(IM_AD, Data_from_Dir_Ack_Cnt, IM_A)
+  {
+  //isNumAcks already set?
+	u_writeDataToCache;	//write incoming data to cache
+	n_popResponseQueue;	//finish with request from the Response queue	
+  }
+  
+  transition(IM_AD, Data_from_Owner, M)
+  {
+	u_writeDataToCache;	//write incoming data to cache
+	sx_store_hit;		//we got a store hit in response to servicing a cache miss
+	w_deallocateTBE;	//remove TBE since we are done
+	n_popResponseQueue;	//finish with request from the Response queue
+  }
+
+  transition(IM_AD, Inv_Ack)
+  {
+	q_updateAckCount;	//do ack-- ->hope this is what this means
+	n_popResponseQueue;	//finish with request from the Response queue
+  }
+  
+  //Begin IM_A transitions
+  transition(IM_A, Load)
+  {
+	z_stall;
+  }
+
+  transition(IM_A, Store)
+  {
+	z_stall;
+  }
+  
+  transition(IM_A, Replacement)
+  {
+	z_stall;
+  }
+  
+  transition(IM_A, Fwd_GetS)
+  {
+	z_stall;
+  }
+  
+  transition(IM_A, Fwd_GetM)
+  {
+	z_stall;
+  }
+  
+  transition(IM_A, Inv_Ack)
+  {
+	q_updateAckCount;	//do ack-- ->hope this is what this means
+	n_popResponseQueue;	//finish with request from the Response queue;
+  }
+  
+  transition(IM_A, Inv_Ack_all, M)
+  {
+	q_updateAckCount;	//do ack-- ->hope this is what this means
+	sx_store_hit;		//we got a store hit in response to servicing a cache miss
+	w_deallocateTBE;	//remove TBE since we are done
+	n_popResponseQueue;	//finish with request from the Response queue
+  }
+  
+  //S transition states
+  transition(S, Load)
+  {
+	r_load_hit;
+	m_popMandatoryQueue;
+  }
+  
+  transition(S, Store, SM_AD)
+  {
+	//Sent GetM to directory
+	p_profileMiss;			//does not have proper permissions
+	v_allocateTBE;			//going into a transient state so we must allocate a Transient Block Entry
+	am_issueGetM;			//issue a GetM to directory
+	m_popMandatoryQueue;	//finish with request	
+  }
+  
+  transition(S, Replacement, SI_A)
+  {
+	//send PutS to directory
+	bs_issuePUTS;				//issue PUTS to directory
+	v_allocateTBE;				//allocate a TBE because we are moving to transient state
+	h_deallocateL1CacheBlock;	//since we are invalidating/doing cache replacement
+  }
+  
+  transition(S, Inv, I)
+  {
+	//Send Inv-Ack to Requestor
+	fi_sendInvAck;				//send the invalidate ack
+	forward_eviction_to_cpu;	//forward the eviction
+	o_popForwardedRequestQueue;	//pop the request from forwarded request queue because this invalidate
+  }
+  
+  //SM_AD state transitions
+  transition(SM_AD, Load)
+  {
+	r_load_hit;
+	m_popMandatoryQueue;
+  }
+  
+  transition(SM_AD, Store)
+  {
+	z_stall;
+  }
+  
+  transition(SM_AD, Replacement)
+  {
+	z_stall;
+  }
+  
+  transition(SM_AD, Fwd_GetS)
+  {
+	z_stall;
+  }
+  
+  transition(SM_AD, Fwd_GetM)
+  {
+	z_stall;
+  }
+
+  transition(SM_AD, Inv, IM_AD)
+  {
+	//Send Inv-ack to Requestor
+	fi_sendInvAck;				//send the invalidate ack
+	forward_eviction_to_cpu;	//forward the eviction
+	o_popForwardedRequestQueue;	//pop the request from forwarded request queue because this invalidate
+  }
+  
+  //data from dir (ack=0) case
+  transition(SM_AD, Data_from_Dir_No_Acks, M)
+  {
+	u_writeDataToCache;			//write data to cache
+	sx_store_hit;				//store hit triggered based on a upgrade miss
+	w_deallocateTBE;			//remove TBE since going to stable state
+	n_popResponseQueue;			//handled request
+  }
+  
+  transition(SM_AD, Data_from_Dir_Ack_Cnt, SM_A)
+  {
+	u_writeDataToCache;			//write data to cache
+	n_popResponseQueue;			//pop the response
+  }
+  
+  transition(SM_AD, Data_from_Owner, M)
+  {
+	u_writeDataToCache;			//write data to cache
+	sx_store_hit;				//store hit triggered based on a upgrade miss
+	w_deallocateTBE;			//remove TBE since going to stable state
+	n_popResponseQueue;			//pop the response
+  }
+  
+  transition(SM_AD, Inv_Ack)
+  {
+	q_updateAckCount;	//do ack-- ->hope this is what this means
+	n_popResponseQueue;	//finish with request from the Response queue;
+  }  
+
+  //begin SM_A transition states
+  //load encountered
+  transition(SM_A, Load)
+  {
+	r_load_hit;
+	m_popMandatoryQueue;
+  }
+
+  //store encountered
+  transition(SM_A, Store)
+  {
+	z_stall;
+  }
+
+  //replacement encountered
+  transition(SM_A, Replacement)
+  {
+    z_stall;
+  }
+
+  //Fwd-GetS encountered
+  transition(SM_A, Fwd_GetS)
+  {
+    z_stall;
+  }
+
+  //Fwd-GetM encountered
+  transition(SM_A, Fwd_GetM)
+  {
+    z_stall;
+  }
+
+  //Inv-Ack encountered (sharer has invalidated block)
+  transition(SM_A, Inv_Ack)
+  {
+    q_updateAckCount;	//do ack-- ->hope this is what this means
+    n_popResponseQueue;	//finish with request from the Response queue;
+  }
+
+  //Last Inv_ack encountered (all sharers have invalidated their blocks)
+  transition(SM_A, Inv_Ack_all, M)
+  {
+    q_updateAckCount;	//do ack-- ->hope this is what this means
+    sx_store_hit;		//we can now call this is a hit because owner
+    w_deallocateTBE;	//let go of TBE since we are in stable state
+    n_popResponseQueue;	//finish with request from the Response queue;
+  }
+  
+  //M State transitions
+  transition(M, Load)
+  {
+    //hit
+	r_load_hit;
+	m_popMandatoryQueue;
+  }
+  
+  transition(M, Store)
+  {
+    //hit
+	s_store_hit;
+	m_popMandatoryQueue;
+  }
+  
+  transition(M, Replacement, MI_A)
+  {
+    bm_issuePUTM;               //sent PutM to dir
+    v_allocateTBE;              //allocate a TBE because we are moving to transient state
+    x_copyDataFromCacheToTBE;   //copy data from cache to TBE in case another core does a Fwd-GetS while in MI_A
+    h_deallocateL1CacheBlock;   //free cache block
+  }
+
+  transition(M, Fwd_GetS, S)
+  {
+    e_sendDataFromCacheToRequestor; //send data to requester
+    de_sendDataFromCacheToDir;      //send data to directory
+    o_popForwardedRequestQueue;     //handle request
+  }  
+  
+  transition(M, Fwd_GetM, I)
+  {
+    e_sendDataFromCacheToRequestor; //send data to requester
+    o_popForwardedRequestQueue;     //handle request
+  }
+
+  //MI_A transitions
+  
+  //load encountered
+  transition(MI_A, Load)
+  {
+    z_stall;
+  }
+  
+  //store encountered
+  transition(MI_A, Store)
+  {
+    z_stall;
+  }
+  
+  //replacement encountered
+  transition(MI_A, Replacement)
+  {
+    z_stall;
+  }
+  
+  //Fwd-GetS - transient state (use TBE to facilitate request)
+  transition(MI_A, Fwd_GetS, SI_A)
+  {
+    ee_sendDataFromTBEToRequestor; //send data to requester from TBE
+    dee_sendDataFromTBEToDir;      //send data to directory from TBE
+    o_popForwardedRequestQueue;    //handle request
+  }
+  
+  //Fwd-GetM - transient state (use TBE to facilitate request)
+  transition(MI_A, Fwd_GetM, II_A)
+  {
+    ee_sendDataFromTBEToRequestor; //send data to requester from TBE
+    o_popForwardedRequestQueue;    //handle request
+  }
+  
+  //Put_Ack encountered - should be a PutM_Ack (or in this case WB_Ack)
+  transition(MI_A, WB_Ack, I)
+  {
+    w_deallocateTBE;	           //let go of TBE since we are going to stable state
+    //forward_eviction_to_cpu;	   //forward the eviction??? Probably not since we didnt evict a cache block
+    o_popForwardedRequestQueue;    //handle request
+  }
+  
+  //SI_A transitions
+  //load encountered
+  transition(SI_A, Load)
+  {
+    z_stall;
+  }
+  
+  //store encountered
+  transition(SI_A, Store)
+  {
+    z_stall;
+  }
+  
+  //replacement encountered
+  transition(SI_A, Replacement)
+  {
+    z_stall;
+  }
+  
+  //Invalidate encountered
+  transition(SI_A, Inv, II_A)
+  {
+    fi_sendInvAck;                 //send Inv-Ack to requestor
+    o_popForwardedRequestQueue;    //handle request
+  }
+  
+  //Put_Ack encountered - this is WB_Ack by this code
+  transition(SI_A, WB_Ack, I)
+  {
+    w_deallocateTBE;	           //let go of TBE since we are going to stable state
+    o_popForwardedRequestQueue;    //handle request
+  }
+  
+  //II_A transitions
+  
+  //load
+  transition(II_A, Load)
+  {
+    z_stall;
+  }
+  
+  //store
+  transition(II_A, Store)
+  {
+    z_stall;
+  }
+  
+  transition(II_A, Replacement)
+  {
+    z_stall;
+  }
+  
+  //Put-Ack (WB_Ack)
+  transition(II_A, WB_Ack, I)
+  {
+    w_deallocateTBE;	           //let go of TBE since we are going to stable state
+    o_popForwardedRequestQueue;    //handle request
+  }
 }
