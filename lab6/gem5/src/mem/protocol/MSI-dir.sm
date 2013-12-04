@@ -716,6 +716,7 @@ getDirectoryEntry(address).Sharers);
   transition(M, PUTS_Last)
   {
 	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	kk_removeRequestSharer;             //remove requestor from sharer ADDED NOW FIXME
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
   
