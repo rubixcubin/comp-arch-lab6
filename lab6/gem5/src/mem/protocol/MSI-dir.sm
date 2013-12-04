@@ -42,13 +42,20 @@ machine(Directory, "Directory protocol")
     M, AccessPermission:Read_Write, desc="Modified";
 
     /* ECE552: Complete this section here */
+	S, AccessPermission:Read_Only, desc="Shared";
 
     //========================
     //ECE552: Transient States
     //========================
 
     /* ECE552: Complete this section here */
-	
+	S_D, 		AccessPermission:Busy, desc="Transient state: In S waiting for Data";
+	//Need to wait for an ack from memory in order to proceed
+	S_D_S_A, 	AccessPermission:Busy, desc="Transient state: Waiting for Memory Ack to go to S";
+	IM_D, 		AccessPermission:Busy, desc="Transient state: Waiting for Memory data to go to M";
+	IS_D,		AccessPermission:Busy, desc="Transient state: Waiting for Memory data to go to S";
+	//We had to write back data to memory when M state block is invalidated/evicted so we need an ack from memory
+	MI_A,		AccessPermission:Busy, desc="Transient state: Waiting for Memory Ack to go to I";
   }
 
   // =============================================================================
@@ -537,6 +544,211 @@ getDirectoryEntry(address).Sharers);
   // =============================================================================
 
   /* ECE552: Complete this section here */
+  //received a GetS while in the Invalid state - break this up into 2 parts
+  //part1: ask memory for the data
+  transition(I, GETS, IS_D)
+  {
+	vv_allocateTBEFromRequestNet;		//Allocate a TBE entry since going to transient state
+	qf_queueMemoryFetchRequest;			//Send MEMORY_READ request to memory to obtain the data
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  //part2: get data from memory and complete I->IS_D->S transition
+  transition(IS_D, Memory_Data, S)
+  {
+	//memory will place the data in the TBE so we go from there
+	w_writeDataToMemoryFromTBE;			//copy data from TBE to directory entry - notation makes no sense but this is what it is doing
+	d_sendData;							//send data from dir. to requestor. This message was used because directory was in invalid state and block had to be retrieved from memory
+	ars1_addRequestorToSharers;			//add requestor to sharers. This message was used because action is taken upon a memory reply
+	qm_popMemQueue;						//handled a memory request
+	w_deallocateTBE;					//remove TBE as we are going to stable state
+  }
+  
+  
+  //received a GetM while in the Invalid state - break this up into 2 parts
+  //part1: ask memory for the data
+  transition(I, GETM, IM_D)
+  {
+	vv_allocateTBEFromRequestNet;		//Allocate a TBE entry since going to transient state
+	qf_queueMemoryFetchRequest;			//Send MEMORY_READ request to memory to obtain the data
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  //part2: get data from memory and complete I->IM_D->M transition
+  transition(IM_D, Memory_Data, M)
+  {
+	//memory will place the data in the TBE so we go from there
+	w_writeDataToMemoryFromTBE;			//copy data from TBE to directory entry
+	d_sendData;							//send data from dir. to requestor. This message was used because directory was in invalid state and block had to be retrieved from memory
+	e_ownerIsRequestor;					//make requestor the owner of this new modified block
+	qm_popMemQueue;						//handled a memory request
+	w_deallocateTBE;					//remove TBE as we are going to stable state
+  }
+  
+  //received a PutS-NotLast while in the invalid state
+  transition(I, PUTS_NotLast)
+  {
+	//Send a Put-ack to the requestor
+	//do we need to clear sharers?
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
 
-
+  transition(I, PUTS_Last)
+  {
+	//Send a Put-ack to the requestor
+	//do we need to clear sharers?
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(I, PUTM_NotOwner)
+  {
+	//Send a Put-ack to the requestor
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S, GETS)
+  {
+	ds_sendSharedData;					//send data from directory for a shared block to a requestor
+	ars2_addRequestorToSharers;			//add requestor to sharers, based on message from incoming queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S, GETM, M)
+  {
+	//tell the previous owners of this block to invalidate themselves as well as sending data to requestor
+	ds2_sendSharedData;					//send data to requestor (this is a shared block and invalidation acks from remote caches required)
+	cs_clearSharers;					//clear all the sharers in this directory block
+	e_ownerIsRequestor;					//requestor is now the owner of this block
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S, PUTS_NotLast)
+  {
+	//Send a Put-ack to the requestor
+	kk_removeRequestSharer;				//remove requestor from sharers
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S, PUTS_Last, I)
+  {
+	kk_removeRequestSharer;				//remove requestor from sharers
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S, PUTM_NotOwner)
+  {
+	kk_removeRequestSharer;				//remove requestor from sharers
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(M, GETS, S_D)
+  {
+	vv_allocateTBEFromRequestNet;		//allocate TBE because we are going into transient state
+	f_forwardRequest;					//send fwd gets to owner
+	aos_addOwnertoSharers;				//add owner to sharers
+	c_clearOwner;						//clear owner
+	ars2_addRequestorToSharers; 		//add requester to sharers based on request queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(M, GETM)
+  {
+	f_forwardRequest;					//send fwd getm to owner
+	e_ownerIsRequestor;					//requestor is now the owner of this block
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(M, PUTS_NotLast)
+  {
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(M, PUTS_Last)
+  {
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  //break up into part1-part2 because we need to access memory
+  //part1 - do mem stuff
+  transition(M, PUTM_Owner, MI_A)
+  {
+	pl_writeDataToDirectory;		//do I need to to put this updated data to directory?
+	vv_allocateTBEFromRequestNet;	//allocate TBE entry
+	lq_queueMemoryWBRequest;		//issue a memory writeback	
+	i_popIncomingRequestQueue;		//handle incoming request
+  }
+  //part2 - do actual stuff
+  transition(MI_A, Memory_Ack, I)
+  {
+	c_clearOwner;						//clear owner
+	la_sendWriteBackAck;				//WB_ACK in response to memory message
+	//w_writeDataToMemoryFromTBE;		//copy data from TBE to directory entry - this is an ACK so no data
+	qm_popMemQueue;						//handled a memory request
+	w_deallocateTBE;					//remove TBE as we are going to stable state
+  }
+  
+  transition(M, PUTM_NotOwner)
+  {
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S_D, GETS)
+  {
+	z_stall;
+  }
+  
+  transition(S_D, GETM)
+  {
+	z_stall;
+  }
+  
+  transition(S_D, PUTS_NotLast)
+  {
+	//Send a Put-ack to the requestor
+	kk_removeRequestSharer;				//remove requestor from sharers
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S_D, PUTS_Last)
+  {
+	//Send a Put-ack to the requestor
+	kk_removeRequestSharer;				//remove requestor from sharers
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  transition(S_D, PUTM_NotOwner)
+  {
+	//Send a Put-ack to the requestor
+	kk_removeRequestSharer;				//remove requestor from sharers
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
+	i_popIncomingRequestQueue;			//Remove request from incoming queue
+  }
+  
+  //transient state modelling
+  // S_D -> S_D_S_A -> S
+  //part1 copy to memory
+  transition(S_D, Data, S_D_S_A)
+  {
+  //do I need to do this
+	//pl2_writeDataToDirectory;		//copy data block to directory entry based on Response Queue
+	lq2_queueMemoryWBRequest;	    //do memory writeback request triggered from Response Queue
+	pr_popIncomingResponseQueue;	//pop Request queue
+	//No need for TBE because we are already in transient state
+  }
+  
+  transition(S_D_S_A, Memory_Ack, S)
+  {
+	qm_popMemQueue;					//handled memory request
+	w_writeDataToMemoryFromTBE;		//copy data from TBE to directory
+	w_deallocateTBE;				//deallocate TBE since we are in 
+  }
 }

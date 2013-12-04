@@ -611,7 +611,7 @@ machine(L1Cache, "MSI L1 Cache")
   /* ECE552: Complete this section here */
   
   //Begin I state transitions
-  transition(I, Load , IS_D)
+  transition(I, {Load,Ifetch} , IS_D)
   {
 	p_profileMiss;			//cache miss
 	i_allocateL1CacheBlock;	//allocate a cache block
@@ -627,11 +627,11 @@ machine(L1Cache, "MSI L1 Cache")
 	i_allocateL1CacheBlock;	//allocate a cache block
 	am_issueGetM;			//issue a GetM to dir
 	v_allocateTBE;			//going into a transient state so we must allocate a Transient Block Entry
-	m_popMandatoryQueue;	//finish with request	
+	m_popMandatoryQueue;	//finish with request
   }
 
   //Begin IS_D state transitions
-  transition(IS_D, Load)
+  transition(IS_D, {Load, Ifetch})
   {
 	z_stall;
   }
@@ -670,7 +670,7 @@ machine(L1Cache, "MSI L1 Cache")
   }
   
   //Begin IM_AD state transitions
-  transition(IM_AD, Load)
+  transition(IM_AD, {Load, Ifetch})
   {
 	z_stall;
   }
@@ -727,7 +727,7 @@ machine(L1Cache, "MSI L1 Cache")
   }
   
   //Begin IM_A transitions
-  transition(IM_A, Load)
+  transition(IM_A, {Load, Ifetch})
   {
 	z_stall;
   }
@@ -767,7 +767,7 @@ machine(L1Cache, "MSI L1 Cache")
   }
   
   //S transition states
-  transition(S, Load)
+  transition(S, {Load, Ifetch})
   {
 	r_load_hit;
 	m_popMandatoryQueue;
@@ -799,7 +799,7 @@ machine(L1Cache, "MSI L1 Cache")
   }
   
   //SM_AD state transitions
-  transition(SM_AD, Load)
+  transition(SM_AD, {Load, Ifetch})
   {
 	r_load_hit;
 	m_popMandatoryQueue;
@@ -864,7 +864,7 @@ machine(L1Cache, "MSI L1 Cache")
 
   //begin SM_A transition states
   //load encountered
-  transition(SM_A, Load)
+  transition(SM_A, {Load, Ifetch})
   {
 	r_load_hit;
 	m_popMandatoryQueue;
@@ -911,7 +911,7 @@ machine(L1Cache, "MSI L1 Cache")
   }
   
   //M State transitions
-  transition(M, Load)
+  transition(M, {Load, Ifetch})
   {
     //hit
 	r_load_hit;
@@ -949,7 +949,7 @@ machine(L1Cache, "MSI L1 Cache")
   //MI_A transitions
   
   //load encountered
-  transition(MI_A, Load)
+  transition(MI_A, {Load, Ifetch})
   {
     z_stall;
   }
@@ -991,7 +991,7 @@ machine(L1Cache, "MSI L1 Cache")
   
   //SI_A transitions
   //load encountered
-  transition(SI_A, Load)
+  transition(SI_A, {Load, Ifetch})
   {
     z_stall;
   }
@@ -1025,7 +1025,7 @@ machine(L1Cache, "MSI L1 Cache")
   //II_A transitions
   
   //load
-  transition(II_A, Load)
+  transition(II_A, {Load, Ifetch})
   {
     z_stall;
   }
