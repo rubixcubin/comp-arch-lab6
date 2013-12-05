@@ -585,8 +585,8 @@ getDirectoryEntry(address).Sharers);
   transition(I, GETM, IM_D)
   {
 	vv_allocateTBEFromRequestNet;		//Allocate a TBE entry since going to transient state
+	e_ownerIsRequestor;                 //ADDED NEW: make requestor owner
 	qf_queueMemoryFetchRequest;			//Send MEMORY_READ request to memory to obtain the data
-    e_ownerIsRequestor;                 //ADDED NEW: make requestor owner
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
   //part2: get data from memory and complete I->IM_D->M transition
@@ -656,8 +656,8 @@ getDirectoryEntry(address).Sharers);
 	//tell the previous owners of this block to invalidate themselves as well as sending data to requestor
 	ds2_sendSharedData;					//send data to requestor (this is a shared block and invalidation acks from remote caches required)
     fwm_sendFwdInvToSharersMinusRequestor;  //added new: send the invalidates
-	cs_clearSharers;					//clear all the sharers in this directory block
 	e_ownerIsRequestor;					//requestor is now the owner of this block
+	cs_clearSharers;					//clear all the sharers in this directory block
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
   
@@ -692,8 +692,8 @@ getDirectoryEntry(address).Sharers);
   {
 	vv_allocateTBEFromRequestNet;		//allocate TBE because we are going into transient state
 	f_forwardRequest;					//send fwd gets to owner
-    ars2_addRequestorToSharers; 		//add requester to sharers based on request queue
 	aos_addOwnertoSharers;				//add owner to sharers
+    ars2_addRequestorToSharers; 		//add requester to sharers based on request queue
 	c_clearOwner;						//clear owner
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
@@ -701,29 +701,29 @@ getDirectoryEntry(address).Sharers);
   transition(M, GETM)
   {
 	f_forwardRequest;					//send fwd getm to owner
-    c_clearOwner;                       //just to be careful
+    c_clearOwner;                       //just to be careful - clear owner's field
 	e_ownerIsRequestor;					//requestor is now the owner of this block
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
   
   transition(M, PUTS_NotLast)
   {
+	kk_removeRequestSharer;             //remove requestor from sharer
 	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
-    kk_removeRequestSharer;             //remove requestor from sharer
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
   
   transition(M, PUTS_Last)
   {
-	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
 	kk_removeRequestSharer;             //remove requestor from sharer ADDED NOW FIXME
+	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
   }
   
-    transition(M, Memory_Ack) 
-    {
-        qm_popMemQueue;
-    }
+  transition(M, Memory_Ack) 
+  {
+    qm_popMemQueue;						//pop mem queue 
+  }
   
   //break up into part1-part2 because we need to access memory
   //part1 - do mem stuff
@@ -792,7 +792,7 @@ getDirectoryEntry(address).Sharers);
   transition(S_D, PUTM_NotOwner)
   {
 	//Send a Put-ack to the requestor
-    pl_writeDataToDirectory;            
+    pl_writeDataToDirectory;         	//write data to dir   
 	kk_removeRequestSharer;				//remove requestor from sharers
 	a_sendWriteBackAck;					//WB_ACK in response to a Put message coming from the request Queue
 	i_popIncomingRequestQueue;			//Remove request from incoming queue
@@ -806,7 +806,7 @@ getDirectoryEntry(address).Sharers);
   {
 	lq2_queueMemoryWBRequest;	    //do memory writeback request triggered from Response Queue
     pl2_writeDataToDirectory;		//copy data block to directory entry based on Response Queue
-    w_deallocateTBE;
+    w_deallocateTBE;				//remove TBE
     pr_popIncomingResponseQueue;
   }
   

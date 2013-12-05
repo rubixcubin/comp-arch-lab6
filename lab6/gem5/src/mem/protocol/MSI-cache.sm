@@ -654,18 +654,18 @@ machine(L1Cache, "MSI L1 Cache")
   //case IS_D -> S when action:Data from Dir (ack=0 case)
   transition(IS_D, Data_from_Dir_No_Acks, S)
   {
-    w_deallocateTBE;	//remove TBE since we are done
 	u_writeDataToCache;	//write incoming data to cache
 	rx_load_hit;		//load hit due to a cache miss that was serviced
+	w_deallocateTBE;	//remove TBE since we are done
 	n_popResponseQueue;	//finish with request from the Response queue
   }
   
   //case IS_D -> S when action:Data from Dir from Owner
   transition(IS_D, Data_from_Owner, S)
   {
-    w_deallocateTBE;	//remove TBE since we are done
 	u_writeDataToCache;	//write incoming data to cache
 	rx_load_hit;		//load hit due to a cache miss that was serviced
+	w_deallocateTBE;	//remove TBE since we are done
 	n_popResponseQueue;	//finish with request from the Response queue
   }
   
@@ -732,8 +732,8 @@ machine(L1Cache, "MSI L1 Cache")
 	u_writeDataToCache; //write incoming data to cache
 	sx_store_hit;       //we got a store hit in response to servicing a cache miss
 	q_updateAckCount;   //update ack count
-	n_popResponseQueue; //finish with request from the Response queue
 	w_deallocateTBE;    //remove TBE since we are done
+	n_popResponseQueue; //finish with request from the Response queue
   }
   
   
@@ -771,8 +771,8 @@ machine(L1Cache, "MSI L1 Cache")
   
   transition(IM_A, Inv_Ack_all, M)
   {
-    w_deallocateTBE;	//remove TBE since we are done
 	sx_store_hit;		//we got a store hit in response to servicing a cache miss
+	w_deallocateTBE;	//remove TBE since we are done
 	n_popResponseQueue;	//finish with request from the Response queue
   }
   
@@ -789,7 +789,7 @@ machine(L1Cache, "MSI L1 Cache")
 	p_profileMiss;			//does not have proper permissions
 	v_allocateTBE;			//going into a transient state so we must allocate a Transient Block Entry
 	am_issueGetM;			//issue a GetM to directory
-    x_copyDataFromCacheToTBE;   //not too sure about this
+    x_copyDataFromCacheToTBE; //copy data to tbe
 	m_popMandatoryQueue;	//finish with request	
   }
   
@@ -797,9 +797,9 @@ machine(L1Cache, "MSI L1 Cache")
   {
 	//send PutS to directory
 	bs_issuePUTS;				//issue PUTS to directory
-    h_deallocateL1CacheBlock;	//since we are invalidating/doing cache replacement
 	v_allocateTBE;				//allocate a TBE because we are moving to transient state
-	forward_eviction_to_cpu;
+    h_deallocateL1CacheBlock;	//since we are invalidating/doing cache replacement
+	forward_eviction_to_cpu;	//tell CPU eviction occured
   }
   
   transition(S, Inv, I)
@@ -841,8 +841,8 @@ machine(L1Cache, "MSI L1 Cache")
   transition(SM_AD, Inv, IM_AD)
   {
 	//Send Inv-ack to Requestor
-	forward_eviction_to_cpu;	//forward the eviction
     fi_sendInvAck;				//send the invalidate ack
+	forward_eviction_to_cpu;	//forward the eviction
 	o_popForwardedRequestQueue;	//pop the request from forwarded request queue because this invalidate
   }
   
@@ -946,9 +946,9 @@ machine(L1Cache, "MSI L1 Cache")
   
   transition(M, Replacement, MI_A)
   {
-    v_allocateTBE;              //allocate a TBE because we are moving to transient state
     bm_issuePUTM;               //sent PutM to dir
-    x_copyDataFromCacheToTBE;   //copy data from cache to TBE in case another core does a Fwd-GetS while in MI_A
+    v_allocateTBE;              //allocate a TBE because we are moving to transient state
+	x_copyDataFromCacheToTBE;   //copy data from cache to TBE in case another core does a Fwd-GetS while in MI_A
     h_deallocateL1CacheBlock;   //free cache block
     forward_eviction_to_cpu;
   }
@@ -964,7 +964,7 @@ machine(L1Cache, "MSI L1 Cache")
   {
     e_sendDataFromCacheToRequestor; //send data to requester
     h_deallocateL1CacheBlock;       //done with cache block and no need for a TBE deallocate
-    forward_eviction_to_cpu;
+    forward_eviction_to_cpu;		//forward eviction to CPU
     o_popForwardedRequestQueue;     //handle request
   }
 
